@@ -1,0 +1,82 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "Martin Thomas"
+date: "September 14, 2014"
+output: html_document
+---
+
+# Executive Summary
+The quantified self movement (a group of enthusiasts who take measurements about themselves regularly to improve their health) attempt to find patterns in their behavior. They regularly quantify how much of a particular activity is done, but  rarely how well it is done. In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+We will show that we can predict the manner in which the exercise is done using the dataset provided.
+
+# Processing
+
+Let's begin with loading the data 
+```{r, echo=TRUE}
+library(caret)
+rawTrain <- read.csv('pml-training.csv', na.strings=c("NA",""), strip.white=T)
+rawTest <- read.csv('pml-testing.csv', na.strings=c("NA",""), strip.white=T)
+```
+
+Now we remove the columns that have NA in them then remove timestamp or similar metadata
+
+```{r, echo=TRUE}
+realtrain <- rawTrain[,!sapply(rawTrain,function(x) any(is.na(x)))]
+realtrain <- subset(realtrain, select=-c(X, user_name, new_window, num_window, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp))
+#str(realtrain)
+#summary(realtrain)
+#dim(realtrain)
+```
+
+Now split rawTrain into train and test sets
+
+```{r, echo=TRUE}
+inTrain <- createDataPartition(realtrain$classe, p=0.8, list=F)
+training <- realtrain[inTrain,]
+testing <- realtrain[-inTrain,]
+```
+
+# Exploratory Analysis
+
+Plotting the correlation matrix is useful to give an idea of whether PCA would be helpful to reduce or remove variables that are highy correlated.
+
+```{r, echo=TRUE}
+library(corrplot)
+cMat <- cor(subset(training, select=-c(classe)))
+corrplot(cMat, order = "FPC", method = "color", type = "lower", tl.col = rgb(0, 0, 0), tl.cex = 0.7)
+```
+
+# Training and using the model
+
+Let's try a random forest and see how accurate that is.  We will use cross-validation and not boot as the method for trainControl or we will be waiting a while.
+
+```{r, echo=TRUE}
+ctrl <- trainControl(allowParallel=T, method="cv", number=5)
+rfmodel <- train(classe ~ ., data=training, method="rf", trControl=ctrl)
+```
+
+Having trained the model, let's get some information about the result like the top 20 variables in order of importance and the confusion matrix.
+
+```{r, echo=TRUE}
+varImp(rfmodel)
+rfmodel$finalModel$confusion
+```
+
+Okay, looks good but what about making some predictions and looking at that confusion matrix
+
+```{r, echo=TRUE}
+rfpred <- predict(rfmodel, newdata=testing)
+sum(rfpred == testing$classe) / length(rfpred)
+confusionMatrix(testing$classe, rfpred)$table
+```
+ 
+# Predicted Results
+
+Now for the real meat, what are the predictions for the assignment questions?
+
+```{r, echo=TRUE}
+realtest <- rawTest[,!sapply(rawTest,function(x) any(is.na(x)))]
+realtest <- subset(realtest, select=-c(X, user_name, new_window, num_window, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp))
+predict(rfmodel, newdata=realtest)
+```
